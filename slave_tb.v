@@ -1,43 +1,43 @@
-`default_nettype 
+`default_nettype none
 `timescale 1ns/1ps
 
 module slave_tb;
 
 // parameters
-parameter DataWidth = 32,
-parameter AddressWidth = 32,
-parameter Size = 8,
-parameter Burst = 8,
-parameter Transfer = 4,
-parameter Prot = 4
+parameter DataWidth = 32;
+parameter AddressWidth = 32;
+parameter Size = 8;
+parameter Burst = 8;
+parameter Transfer = 4;
+parameter Prot = 4;
 
 // local parameters
 
 // local parameters for HSize
-local parameter BYTE          = 3'b000;
-local parameter HALFWORD      = 3'b001;
-local parameter WORD          = 3'b010;
-local parameter DOUBLEWORD    = 3'b011;
-local parameter QUADWORD      = 3'b100;
-local parameter BYTE_256      = 3'b101;
-local parameter BYTE_512      = 3'b110;
-local parameter BYTE_1024     = 3'b111;
+localparam BYTE          = 3'b000;
+localparam HALFWORD      = 3'b001;
+localparam WORD          = 3'b010;
+localparam DOUBLEWORD    = 3'b011;
+localparam QUADWORD      = 3'b100;
+localparam BYTE_256      = 3'b101;
+localparam BYTE_512      = 3'b110;
+localparam BYTE_1024     = 3'b111;
 
 // Local parameters for HBurst
-local parameter SINGLE          = 3'b000;
-local parameter INCR            = 3'b001;
-local parameter WRAP4           = 3'b010;
-local parameter INCR4           = 3'b011;
-local parameter WRAP8           = 3'b100;
-local parameter INCR8           = 3'b101;
-local parameter WRAP16          = 3'b110;
-local parameter INCR16          = 3'b111;
+localparam SINGLE           = 3'b000;
+localparam INCR             = 3'b001;
+localparam WRAP_4           = 3'b010;
+localparam INCR_4           = 3'b011;
+localparam WRAP_8           = 3'b100;
+localparam INCR_8           = 3'b101;
+localparam WRAP_16          = 3'b110;
+localparam INCR_16          = 3'b111;
 
 // local parameters for HTrans
-local parameter IDLE         = 2'b00;
-local parameter BUSY         = 2'b01;
-local parameter NONSEQ       = 2'b10;
-local parameter SEQ          = 2'b11;
+localparam IDLE         = 2'b00;
+localparam BUSY         = 2'b01;
+localparam NONSEQ       = 2'b10;
+localparam SEQ          = 2'b11;
 
 
 // inputs
@@ -97,17 +97,21 @@ integer i = 0;
 
 initial begin
     
-    Hsize = WORD;
+    HSize = WORD;
     HBurst = SINGLE;
     HTrans = NONSEQ;
-    Hsel = 1;
+    HSel = 1;
     HReady = 1;
     HResetn = 1;
+
+    $dumpfile("slave.vcd");
+    $dumpvars(0,slave_tb);
     
 
 
     // reset test
     HResetn = 0;
+    #15;
     $display("\nHResp : %0b , HReady : %0b , HRdata : %0h ",HResp,HReadyOut,HRdata);
 
     #200;
@@ -118,7 +122,7 @@ initial begin
     HWdata = 32'h12345678;
     HWrite = 1; 
     #15;
-    $display("\nHResp : %0b , HReady : %0b , HRdata : %0h ",HResp,HReadyOut,HRdata);
+    $display("\nHResp : %0b , HReady : %0b ",HResp,HReadyOut);
 
 
     #200;
@@ -136,7 +140,7 @@ initial begin
     HWrite = 1;
     HWdata = 32'h22334455;
     #15;
-    $display("\nHResp : %0b , HReady : %0b , HRdata : %0h ",HResp,HReadyOut,HRdata);
+    $display("\nHResp : %0b , HReady : %0b  ",HResp,HReadyOut);
 
     // Continuous writes 
         @(negedge HClk);

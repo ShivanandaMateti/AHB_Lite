@@ -26,36 +26,36 @@ module slave #(
 
 
 // local parameters for HSize
-local parameter BYTE          = 3'b000;
-local parameter HALFWORD      = 3'b001;
-local parameter WORD          = 3'b010;
-local parameter DOUBLEWORD    = 3'b011;
-local parameter QUADWORD      = 3'b100;
-local parameter BYTE_256      = 3'b101;
-local parameter BYTE_512      = 3'b110;
-local parameter BYTE_1024     = 3'b111;
+localparam BYTE          = 3'b000;
+localparam HALFWORD      = 3'b001;
+localparam WORD          = 3'b010;
+localparam DOUBLEWORD    = 3'b011;
+localparam QUADWORD      = 3'b100;
+localparam BYTE_256      = 3'b101;
+localparam BYTE_512      = 3'b110;
+localparam BYTE_1024     = 3'b111;
 
 // Local parameters for HBurst
-local parameter SINGLE          = 3'b000;
-local parameter INCR            = 3'b001;
-local parameter WRAP4           = 3'b010;
-local parameter INCR4           = 3'b011;
-local parameter WRAP8           = 3'b100;
-local parameter INCR8           = 3'b101;
-local parameter WRAP16          = 3'b110;
-local parameter INCR16          = 3'b111;
+localparam SINGLE          = 3'b000;
+localparam INCR            = 3'b001;
+localparam WRAP_4           = 3'b010;
+localparam INCR_4           = 3'b011;
+localparam WRAP_8           = 3'b100;
+localparam INCR_8           = 3'b101;
+localparam WRAP_16          = 3'b110;
+localparam INCR_16          = 3'b111;
 
 // local parameters for HTrans
-local parameter IDLE         = 2'b00;
-local parameter BUSY         = 2'b01;
-local parameter NONSEQ       = 2'b10;
-local parameter SEQ          = 2'b11;
+localparam IDLE         = 2'b00;
+localparam BUSY         = 2'b01;
+localparam NONSEQ       = 2'b10;
+localparam SEQ          = 2'b11;
 
 // local parameters
 localparam Depth = 1024;
 localparam  Byte_width = 8 ;
 // Internal Memory 
-reg [Byte-1 : 0] mem[0 : Depth-1];
+reg [Byte_width - 1 : 0] mem[0 : Depth-1];
 
 // internal signals
 reg HResp_reg;

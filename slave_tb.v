@@ -26,12 +26,12 @@ localparam BYTE_1024     = 3'b111;
 // Local parameters for HBurst
 localparam SINGLE           = 3'b000;
 localparam INCR             = 3'b001;
-localparam WRAP_4           = 3'b010;
-localparam INCR_4           = 3'b011;
-localparam WRAP_8           = 3'b100;
-localparam INCR_8           = 3'b101;
-localparam WRAP_16          = 3'b110;
-localparam INCR_16          = 3'b111;
+localparam WRAP4           = 3'b010;
+localparam INCR4           = 3'b011;
+localparam WRAP8           = 3'b100;
+localparam INCR8           = 3'b101;
+localparam WRAP16          = 3'b110;
+localparam INCR16          = 3'b111;
 
 // local parameters for HTrans
 localparam IDLE         = 2'b00;
@@ -176,6 +176,8 @@ initial begin
         @(negedge HClk);
         HAddr  = 32'd12;
         HWrite = 0;
+        #15;
+        $display("\nHResp : %0b , HReady : %0b , HRdata : %0h ",HResp,HReadyOut,HRdata);
         #15;
         $display("\nHResp : %0b , HReady : %0b , HRdata : %0h ",HResp,HReadyOut,HRdata);
 

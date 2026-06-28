@@ -51,10 +51,7 @@ localparam BUSY         = 2'b01;
 localparam NONSEQ       = 2'b10;
 localparam SEQ          = 2'b11;
 
-// Variables
 
-reg [4:0] beatSize;
-reg [2:0] DataSize;
 
 // To latch inputs 
 
@@ -83,32 +80,20 @@ wire valid_transfer;
 
 // Latching address and control signals
 always@(posedge HClk,negedge HResetn)begin
-      if(!HResetn)begin
-            HSelL            <= 0;
-            HAddrL           <= HAddr;
-            HSizeL           <= BYTE;
-            HBurstL          <= SINGLE;
-            HTransL          <= IDLE;
-            HProtL           <= 4'b1100;
-            HReadyL          <= 1;
-            HMastlockL       <= 0;
-            HWriteL          <= 1;
-      end
-      else begin
-            HSelL            <= HSel;
-            HAddrL           <= HAddr;
-            HSizeL           <= HSize;
-            HBurstL          <= HBurst;
-            HTransL          <= HTrans;
-            HProtL           <= HProt;
-            HReadyL          <= HReady;
-            HMastlockL       <= HMastlock;
-            HWriteL          <= HWrite;     
-      end
+
+      HSelL            <= HSel;
+      HAddrL           <= HAddr;
+      HSizeL           <= HSize;
+      HBurstL          <= HBurst;
+      HTransL          <= HTrans;
+      HProtL           <= HProt;
+      HReadyL          <= HReady;
+      HMastlockL       <= HMastlock;
+      HWriteL          <= HWrite;     
+      
 end
 
-// integer cycles for counting the no of clk cycles
-integer cycle = 1;
+
 
 // using the latched inputs 
 
@@ -117,36 +102,32 @@ always@(posedge HClk,negedge HResetn)begin
             HResp_reg     <= 1'b0;
             HReadyOut_reg <= 1'b1;
             HRdata_reg    <= {DataWidth{1'b0}};
-            beat_count    <= 5'd0;
       end
       else begin
             if(HAddrL < Depth)begin
                   if(valid_transfer)begin
                               case(HSizeL)
                               BYTE       :begin
-                                          DataSize = 3'b1;
-                                          (HWriteL) ? mem[HAddrL] <= HWdata[7:0] : HRdata <= mem[HAddrL]; 
+                                          (HWriteL) ? mem[HAddrL] <= HWdata[7:0] : HRdata_reg <= mem[HAddrL]; 
                                           HResp_reg <= 0;
                               end
                               HALFWORD   :begin
-                                          DataSize = 3'd2;
                                                 if(HAddrL[0] == 0)begin
                                                       if(HWriteL)
                                                             {mem[HAddrL+1],mem[HAddrL]} <= HWdata[15:0];
                                                       else
-                                                            HRdata[15:0]                <= {mem[HAddrL]+1,mem[HAddrL]};
+                                                            HRdata_reg[15:0]                <= {mem[HAddrL]+1,mem[HAddrL]};
                                                       HResp_reg <= 0;
                                                 end
                                                 else
                                                       HResp_reg <= 1;
                               end
                               WORD       :begin
-                                          DataSize = 3'd4;
                                                 if(HAddrL[1:0] == 2'b00)begin
                                                       if(HWriteL)
                                                             {mem[HAddrL+3],mem[HAddrL+2],mem[HAddrL+1],mem[HAddrL]} <= HWdata;     
                                                       else
-                                                            HRdata   <= {mem[HAddrL+3],mem[HAddrL+2],mem[HAddrL+1],mem[HAddrL]};
+                                                            HRdata_reg   <= {mem[HAddrL+3],mem[HAddrL+2],mem[HAddrL+1],mem[HAddrL]};
                                                       HResp_reg <= 0;
                                                 end
                                                 else
@@ -168,7 +149,7 @@ end
 assign HResp = HResp_reg;
 assign HReadyOut = HReadyOut_reg;
 assign HRdata = HRdata_reg;
-assign valid_transfer = (HSelL && HReadyL && (HTransL == NONSEQ) && (HBurstL == SINGLE));
+assign valid_transfer = (HSelL && HReadyL && ((HTransL==SEQ) | (HTransL==NONSEQ)));
 
 endmodule
 

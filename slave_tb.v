@@ -10,6 +10,8 @@ parameter Size = 8;
 parameter Burst = 8;
 parameter Transfer = 4;
 parameter Prot = 4;
+parameter BaseAddr = 32'h0000_0000 ;
+parameter Depth = 1024;
 
 // local parameters
 
@@ -61,7 +63,9 @@ wire [DataWidth-1 : 0] HRdata;
 
 // Instantiation
 
-slave              #(
+slave_0              #(
+                            .BaseAddr(BaseAddr),
+                            .Depth(Depth),
                             .DataWidth(DataWidth),
                             .AddressWidth(AddressWidth),
                             .Size(Size),
@@ -186,5 +190,3 @@ $finish;
 end
 
 endmodule
-
-

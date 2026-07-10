@@ -31,7 +31,8 @@ module  master   #(
                     output [$clog2(Transfer)-1 : 0] HTrans,
                     output [Prot-1 : 0] HProt,
                     output done, // to know if the transfer is finished 
-                    output busy  // to know if the transfer is going on or not
+                    output busy,  // to know if the transfer is going on or not
+                    output [DataWidth-1 : 0] HRdata_out // to verify the data read
                   );
 
 // local parameters for HSize
@@ -70,6 +71,7 @@ localparam incr         = 2'd3;
 // reg signals to be mapped to outputs
 reg [AddressWidth-1 : 0] HAddr_reg;
 reg [DataWidth-1 : 0] HWdata_reg;
+reg [DataWidth-1 : 0] HRdata_out_reg;
 reg HMastlock_reg;
 reg HWrite_reg;
 reg [$clog2(Size)-1 : 0] HSize_reg;
@@ -80,6 +82,7 @@ reg [Prot-1 : 0] HProt_reg;
 // reg signals to be assigned to output
 reg [AddressWidth-1 : 0] start_Address;
 reg [DataWidth-1 : 0] HWdata_next;
+reg [DataWidth-1 : 0] HRdata_out_next;
 reg HMastlock_next;
 reg HWrite_next;
 reg [$clog2(Size)-1 : 0] HSize_next;
@@ -96,7 +99,7 @@ reg [2:0] state , next_state;
 // internal signals
 reg [AddressWidth-1 : 0] Next_Address;  // next address to output in a burst
 reg [7:0] DataSize;                     // to determine the size of data in bytes 
-reg [4:0] beatSize;                     // to determine the no of clock cycles for transfer
+reg [7:0] beatSize;                     // to determine the no of clock cycles for transfer
 reg [4:0] beat_count;                   // to count up to beatsize
 reg [AddressWidth-1 : 0] Wrap_Base;     // this is address to go when we reach wrap address in wrap burst
 reg [AddressWidth-1 : 0] Wrap_Addr;     // once this address is reached we need to wrap to wrapbase
@@ -178,13 +181,13 @@ end
 // for HBurst
 always@(*)begin
       case(HBurst_req)
-      SINGLE                    : beatSize = 5'd1;
-      WRAP4                     : beatSize = 5'd4;
-      INCR4                     : beatSize = 5'd4;
-      WRAP8                     : beatSize = 5'd8;
-      INCR8                     : beatSize = 5'd8;
-      WRAP16                    : beatSize = 5'd16;
-      INCR16                    : beatSize = 5'd16;
+      SINGLE                    : beatSize = 7'd1;
+      WRAP4                     : beatSize = 7'd4;
+      INCR4                     : beatSize = 7'd4;
+      WRAP8                     : beatSize = 7'd8;
+      INCR8                     : beatSize = 7'd8;
+      WRAP16                    : beatSize = 7'd16;
+      INCR16                    : beatSize = 7'd16;
       default                   : beatSize = beats_req;
      endcase
 end
@@ -237,7 +240,27 @@ always@(*)begin
             end
             transfer                      :  begin
                                              HTrans_next = SEQ;
-                                             HWdata_next = HWdata_req;
+                                             if(HWrite_next)begin
+                                             case(HSize_reg)
+                                             BYTE           : begin
+                                                                  case(HAddr_reg[1:0])
+                                                                  2'b00          : HWdata_next = {24'd0,HWdata_req[7:0]};
+                                                                  2'b01          : HWdata_next = {16'd0,HWdata_req[7:0],8'd0};
+                                                                  2'b10          : HWdata_next = {8'd0,HWdata_req[7:0],16'd0};
+                                                                  2'b11          : HWdata_next = {HWdata_req[7:0],24'd0};
+                                                                  endcase
+                                             end 
+                                             HALFWORD       : begin
+                                                                  case(HAddr_reg[1])
+                                                                  1'b0           : HWdata_next = {16'd0,HWdata_req[15:0]};
+                                                                  1'b1           : HWdata_next = {HWdata_req[15:0],16'd0};
+                                                                  endcase
+                                             end
+                                             default        : HWdata_next = HWdata_req;
+                                             endcase   
+                                             end
+                                             else
+                                                HRdata_out_next = HRdata;
             end
             error_state                   :  HTrans_next = IDLE;
             lock_idle                     :  HTrans_next = IDLE;
@@ -251,7 +274,6 @@ always@(*)begin
                                              HMastlock_next  = HMastlock_reg;
                                              HProt_next      = HProt_reg;                                            
             end
-
       endcase
 end
 
@@ -268,7 +290,7 @@ always@(posedge HClk,negedge HResetn)begin
             HMastlock_reg       <= 0;
             HWrite_reg          <= 1;
             state               <= idle;
-            beat_count          <= 5'd0;
+            beat_count          <= 7'd0;
       end
 
       else begin
@@ -282,12 +304,13 @@ always@(posedge HClk,negedge HResetn)begin
             case(state)
                   start               :     begin 
                                               HAddr_reg  <= start_Address;
-                                              beat_count <= 5'd0;
+                                              beat_count <= 7'd0;
                                               Wrap_Base <= start_Address & (~(beatSize*DataSize-1));
                                               Wrap_Addr <= (start_Address & (~(beatSize*DataSize-1))) + (beatSize*DataSize);                                              
                   end
                   transfer            :     begin
                                               HWdata_reg <= HWdata_next;
+                                              HRdata_out_reg <= HRdata_out_next;
                                               beat_count <= beat_count + 1;
                                               HAddr_reg  <= Next_Address;
                                               if(beat_count == (beatSize-1))begin
@@ -312,71 +335,6 @@ assign HTrans = HTrans_reg;
 assign HProt = HProt_reg;
 assign done = (state == done_s);
 assign busy = (state != idle);
+assign HRdata_out = HRdata_out_reg; 
 
 endmodule
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                        
-
-
-            

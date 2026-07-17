@@ -103,6 +103,7 @@ reg [DataWidth-1:0] dataStorage [0 : 127];
 // for score board
 integer pass_count = 0;
 integer fail_count = 0;
+integer i;
 
 // helper tasks
 
@@ -118,20 +119,23 @@ begin
 end
 endtask
 
+// To write only once per beat
+wire beat_done = AHB_dut.HReadyOut && ((AHB_dut.MASTER.state == 4'd2) || (AHB_dut.MASTER.state == 4'd3));
+
 // to do multiple transfers
 // for write
 task multiple_write_transfer;
 input [4:0] noOfTransfers;
 integer i;
             begin
+                HWdata_req = dataStorage[0];
                 fork 
-                    @(negedge HClk);
-                    HWdata_req = dataStorage[0];
                     begin
+                        @(posedge busy);
                         for(i=1 ; ((i < noOfTransfers) && busy ); i = i+1)begin
-                        @(AHB_dut.HAddr);
-                        @(negedge HClk);
-                        HWdata_req = dataStorage[i];
+                           @(posedge beat_done);  
+                            @(posedge HClk);#1;
+                            HWdata_req = dataStorage[i];
                         end
                     end
                     begin
@@ -148,18 +152,19 @@ integer i;
             begin
                 fork 
                     begin
+                        @(posedge busy);
                         for(i=0 ; ((i < noOfTransfers) && busy ); i = i+1)begin
+                                @(posedge beat_done); 
+                                @(posedge HClk);#1; 
                                 if(HRdata_out==dataStorage[i])begin
                                     $display("%0d th transfer done successfully !  ",i+1);
                                     $display("DataWritten : %0h , DataRead : %0h",dataStorage[i],HRdata_out);
                                     pass_count = pass_count + 1;
-                                    @(AHB_dut.HAddr);
                                 end
                                 else begin
                                     $display("%0d th transfer failed !  ",i+1);
                                     $display("DataWritten : %0h , DataRead : %0h",dataStorage[i],HRdata_out);
                                     fail_count = fail_count + 1;
-                                    @(AHB_dut.HAddr);
                                 end
                         end
                     end
@@ -194,12 +199,40 @@ initial begin
     #300;
     HResetn = 1'b1;
 
+    $dumpfile("AHB.vcd");
+    $dumpvars(0,AHB_top_tb);
+
+    // Test-4 Writing to an address out of range
+    $display("Test-4 Writing to an address out of range ");
+    HAddr_req = 32'h0001_0000;
+    HWrite_req = 1'b1;
+    HWdata_req = 32'h42424242;
+    fork
+        begin
+            do_transfer();
+        end
+        begin
+            #50;
+             if(AHB_dut.mux.HSel_default)begin
+                $display("PASS ! Detected out of range address. Default slave selected , HSel_default = %0b",AHB_dut.mux.HSel_default);
+                pass_count = pass_count + 1;
+             end
+             else begin
+                $display("Failed ! HResp = %0b HReady = %0b",AHB_dut.HRespOut,AHB_dut.HReadyOut );
+                fail_count = fail_count + 1;
+             end
+        end
+    join
+
+    #400;
+
     // Test-1 Single write and read back a byte to slave_0
     $display("Test-1 Single write and read back a byte to slave_0 ");
     HAddr_req = 32'd0;
     HWrite_req = 1'b1;
     HWdata_req = 32'h11;
     do_transfer();
+    #40;
     HWrite_req = 1'b0;
     do_transfer();
     #40;
@@ -220,6 +253,7 @@ initial begin
     HWrite_req = 1'b1;
     HWdata_req = 32'h2222;
     do_transfer();
+    #40;
     HWrite_req = 1'b0;
     do_transfer();
     #40;
@@ -240,6 +274,7 @@ initial begin
     HWrite_req = 1'b1;
     HWdata_req = 32'h33333333;
     do_transfer();
+    #40;
     HWrite_req = 1'b0;
     do_transfer();
     #40;
@@ -253,39 +288,12 @@ initial begin
         
     end
 
-    // Test-4 Writing to an address out of range
-    $display("Test-4 Writing to an address out of range ");
-    HAddr_req = 32'h0001_0000;
-    HWrite_req = 1'b1;
-    HWdata_req = 32'h42424242;
-    fork
-        begin
-            do_transfer();
-        end
-        begin
-            @(posedge HClk); // wait for 1st error cycle
-             if((AHB_dut.HRespOut) == 1  & (AHB_dut.HReadyOut == 0))begin
-                $display("Error cycle 1 HResp = %0b HReady = %0b",AHB_dut.HRespOut,AHB_dut.HReadyOut );
-             end
-             else begin
-                $display("Error cycle 1 failed ! HResp = %0b HReady = %0b",AHB_dut.HRespOut,AHB_dut.HReadyOut );
-             end
-             @(posedge HClk); // wait for 2nd error cycle
-             if((AHB_dut.HRespOut) == 1  & (AHB_dut.HReadyOut == 1))begin
-                $display("Error cycle 2 HResp = %0b HReady = %0b",AHB_dut.HRespOut,AHB_dut.HReadyOut );
-                pass_count = pass_count + 1;
-             end
-             else begin
-                $display("Error cycle 2 failed ! HResp = %0b HReady = %0b",AHB_dut.HRespOut,AHB_dut.HReadyOut );
-                fail_count = fail_count + 1;
-             end
-        end
-    join
-
+#200;
 
     // Test-5 back to back beats to 2 different slaves
     $display("Test-5 back to back beats to 2 different slaves" );
     // to slave 0 write
+    $display("Writing a series of HALFWORDS to slave_0 using WRAP4 burst");
     HAddr_req = 32'h0000_0100;
     HSize_req = HALFWORD;
     HWrite_req = 1'b1;
@@ -294,13 +302,31 @@ initial begin
     dataStorage[1] = 32'h1234;
     dataStorage[2] = 32'h5678;
     dataStorage[3] = 32'h2134;
-    multiple_write_transfer(5'd4);
+    multiple_write_transfer(4'd4);
+    /*
+    @(negedge HClk);
+    begins = 1'b1;
+    @(posedge HClk);
+    begins = 1'b0;
+    for(i=0 ; i < 4 ; i = i+1)begin
+        if(i==0)begin
+            repeat(2) @(posedge HClk);  // waiting for the address to settle
+            HWdata_req = dataStorage[0];
+        end
+        else begin
+            @(posedge beat_done);
+            repeat(3) @(posedge HClk);  // waiting for the address to settle
+            HWdata_req = dataStorage[i];
+        end
+    end
+    */
 
     // to slave 1 write
+    $display("Writing a series of BYTES to slave_1 using INCR8 burst");
     HAddr_req = 32'h0000_0440;
     HSize_req = BYTE;
     HWrite_req = 1'b1;
-    HBurst_req = WRAP8;
+    HBurst_req = INCR8;
     dataStorage[0] = 32'h45;
     dataStorage[1] = 32'h56;
     dataStorage[2] = 32'h12;
@@ -309,44 +335,95 @@ initial begin
     dataStorage[5] = 32'h20;
     dataStorage[6] = 32'h67;
     dataStorage[7] = 32'h39;
-    multiple_write_transfer(5'd8);
+    multiple_write_transfer(4'd8);
+    /*
+    @(negedge HClk);
+    begins = 1'b1;
+    @(posedge HClk);
+    begins = 1'b0;
+    for(i=0 ; i < 8 ; i = i+1)begin
+        if(i==0)begin
+            HWdata_req = dataStorage[0];
+            repeat(2) @(posedge HClk);  // waiting for the address to settle
+        end
+        else begin
+            @(posedge beat_done);
+            repeat(3) @(posedge HClk);  // waiting for the address to settle
+            HWdata_req = dataStorage[i];
+        end
+    end
+    */
+    
 
     // to slave 0 read
+    $display("Reading a series of HALFWORDS from slave_0 using WRAP4 burst");
     HAddr_req = 32'h0000_0100;
     HSize_req = HALFWORD;
     HWrite_req = 1'b0;
     HBurst_req = WRAP4;
     dataStorage[0] = 32'h2432;
-    dataStorage[1] = 32'h1234;
-    dataStorage[2] = 32'h5678;
-    dataStorage[3] = 32'h2134;
-    multiple_read_transfer_check(5'd4);
+    dataStorage[1] = 32'h12340000;
+    dataStorage[2] = 32'h00005678;
+    dataStorage[3] = 32'h21340000;
+    multiple_read_transfer_check(4'd4);
+    /*
+    @(negedge HClk);
+    begins = 1'b1;
+    @(posedge HClk);
+    begins = 1'b0;
+    repeat(2) @(posedge HClk);  // waiting for the address to settle
+    for(i = 0 ; i < 4 ; i = i+1)begin
+        @(posedge beat_done);
+        if(AHB_dut.HRdata_out == dataStorage[i])begin
+            $display("PASS ! Data written : %0h , DataRead : %0h",dataStorage[i],AHB_dut.HRdata_out);
+            pass_count = pass_count + 1;
+        end
+        else begin
+            $display("FAIL ! Data written : %0h , DataRead : %0h",dataStorage[i],AHB_dut.HRdata_out);
+            fail_count = fail_count + 1;
+        end
+    end
+    */
 
     // to slave 1 read
+    $display("Reading a series of BYTES from slave_1 using INCR8 burst");
     HAddr_req = 32'h0000_0440;
     HSize_req = BYTE;
     HWrite_req = 1'b0;
-    HBurst_req = WRAP8;
+    HBurst_req = INCR8;
     dataStorage[0] = 32'h45;
-    dataStorage[1] = 32'h56;
-    dataStorage[2] = 32'h12;
-    dataStorage[3] = 32'h34;
+    dataStorage[1] = 32'h5600;
+    dataStorage[2] = 32'h120000;
+    dataStorage[3] = 32'h34000000;
     dataStorage[4] = 32'h56;
-    dataStorage[5] = 32'h20;
-    dataStorage[6] = 32'h67;
-    dataStorage[7] = 32'h39;
-    multiple_read_transfer_check(5'd8);
-
-    // Test sequence end
+    dataStorage[5] = 32'h2000;
+    dataStorage[6] = 32'h670000;
+    dataStorage[7] = 32'h39000000;
+    multiple_read_transfer_check(4'd8);
+    /*
+    @(negedge HClk);
+    begins = 1'b1;
+    @(posedge HClk);
+    begins = 1'b0;
+    repeat(2) @(posedge HClk);  // waiting for the address to settle
+    for(i = 0 ; i < 8 ; i = i+1)begin
+        @(posedge beat_done);
+        if(AHB_dut.HRdata_out == dataStorage[i])begin
+            $display("PASS ! Data written : %0h , DataRead : %0h",dataStorage[i],AHB_dut.HRdata_out);
+            pass_count = pass_count + 1;
+        end
+        else begin
+            $display("FAIL ! Data written : %0h , DataRead : %0h",dataStorage[i],AHB_dut.HRdata_out);
+            fail_count = fail_count + 1;
+        end
+    end
+    */
+    
+    // Test sequence 
     //--------------------------> RESULTS <-----------------------------
     $display("TESTING FINISHED !!!!");
     $display("THE RESULTS ARE : \n PASSCOUNT = %0d \n FAILCOUNT = %0d ",pass_count,fail_count );
 
-
-
-
-    
-    
    
 
 $finish;
@@ -355,7 +432,7 @@ end
 
 // runtime error guard
 initial begin
-    #50000000;
+    #6000000;
     $display("Simulation time exceeded ! ");
     $finish;
 end

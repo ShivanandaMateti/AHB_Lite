@@ -466,20 +466,20 @@ initial begin
     HAddr = 32'd40;
     HTrans = NONSEQ;
     HWrite = 0;
-    #20;
+    #40;
     checkRead(HRdata, 32'h0 );
     @(negedge HClk);
     HTrans = SEQ;
     HAddr = 32'd44;
-    #20;
+    #40;
     checkRead(HRdata, 32'h11111111);
     @(negedge HClk);
     HAddr = 32'd48;
-    #20;
+    #40;
     checkRead(HRdata, 32'h22222222);
     @(negedge HClk);
     HAddr = 32'd52;
-    #20;
+    #40;
     checkRead(HRdata, 32'h33333333);
 
 

@@ -91,10 +91,10 @@ reg [$clog2(Transfer)-1 : 0] HTrans_next;
 reg [Prot-1 : 0] HProt_next;
 
 // local parameters for Master FSM states
-localparam  idle = 3'd0 , start = 3'd1 , transfer = 3'd2 , waitReady = 3'd3 , done_s = 3'd4 ,error_state = 3'd5,lock_idle = 3'd6;
+localparam  idle = 4'd0 , start = 4'd1 , transfer = 4'd2 , waitReady = 4'd3 , done_s = 4'd4 ,error_state = 4'd5,lock_idle = 4'd6 , addr_transfer1 = 4'd7 , addr_transfer2 = 4'd8;
 
 // state register
-reg [2:0] state , next_state;
+reg [3:0] state , next_state;
 
 // internal signals
 reg [AddressWidth-1 : 0] Next_Address;  // next address to output in a burst
@@ -113,14 +113,9 @@ always@(*)begin
       next_state = state;
       case(state)
       idle          : next_state = (begins) ? start : idle;
-      start         :begin
-                        if(!HReady)
-                              next_state = waitReady;
-                        else if(HResp)
-                              next_state = error_state;
-                        else
-                              next_state = transfer;
-      end         
+      start         : next_state = addr_transfer1;
+      addr_transfer1: next_state = addr_transfer2;
+      addr_transfer2: next_state = transfer;       
       transfer      : begin
                         if(!HReady)
                               next_state = waitReady;
@@ -129,7 +124,7 @@ always@(*)begin
                         else if(beat_count == (beatSize-1))
                               next_state = (HMastlock_reg)? lock_idle : done_s;
                         else
-                              next_state = transfer;
+                              next_state = addr_transfer1;
       end
       waitReady     : begin
                         if(HReady) begin
@@ -138,7 +133,7 @@ always@(*)begin
                               else if(beat_count == (beatSize-1))
                                     next_state = (HMastlock_req)? lock_idle : done_s;
                               else
-                                    next_state = transfer;
+                                    next_state = addr_transfer1;
                         end
                         else
                               next_state = waitReady;
@@ -243,34 +238,7 @@ always@(*)begin
             endcase 
 end
 
-// Calculating HWdata_next to give it to output
-always@(*)begin
-      HWdata_next = HWdata_reg;
-      HRdata_out_next = HRdata;
-      if(HWrite_next)begin
-            case(HSize_reg)
-                  BYTE           : begin
-                                    case(HAddr_reg[1:0])
-                                          2'b00          : HWdata_next = {24'd0,HWdata_req[7:0]};
-                                          2'b01          : HWdata_next = {16'd0,HWdata_req[7:0],8'd0};
-                                          2'b10          : HWdata_next = {8'd0,HWdata_req[7:0],16'd0};
-                                          2'b11          : HWdata_next = {HWdata_req[7:0],24'd0};
-                                          default        : HWdata_next = {24'd0,HWdata_req[7:0]};
-                                    endcase
-                  end 
-                  HALFWORD       : begin
-                                    case(HAddr_reg[1])
-                                          1'b0           : HWdata_next = {16'd0,HWdata_req[15:0]};
-                                          1'b1           : HWdata_next = {HWdata_req[15:0],16'd0};
-                                          default        : HWdata_next = {16'd0,HWdata_req[15:0]};
-                                    endcase
-                  end
-                  default        : HWdata_next = HWdata_req;
-            endcase   
-      end
-      else
-            HRdata_out_next = HRdata;
-end
+
 
 // output assigning
 
@@ -288,19 +256,32 @@ always@(*)begin
                                               HMastlock_next  = HMastlock_req;
                                               start_Address      = HAddr_req; 
             end
-            transfer                      :  HTrans_next = SEQ;
+            transfer ,waitReady                     :  begin
+                                              if(state == transfer) HTrans_next = SEQ;
+                                              
+                                              if (HWrite_next) begin
+                                                      case(HSize_reg)
+                                                            BYTE: case(HAddr_reg[1:0])
+                                                                  2'b00: HWdata_next = {24'd0,HWdata_req[7:0]};
+                                                                  2'b01: HWdata_next = {16'd0,HWdata_req[7:0],8'd0};
+                                                                  2'b10: HWdata_next = {8'd0,HWdata_req[7:0],16'd0};
+                                                                  2'b11: HWdata_next = {HWdata_req[7:0],24'd0};
+                                                                  default: HWdata_next = {24'd0,HWdata_req[7:0]};
+                                                                  endcase
+                                                            HALFWORD: case(HAddr_reg[1])
+                                                                        1'b0: HWdata_next = {16'd0,HWdata_req[15:0]};
+                                                                        1'b1: HWdata_next = {HWdata_req[15:0],16'd0};
+                                                                        default: HWdata_next = {16'd0,HWdata_req[15:0]};
+                                                                      endcase
+                                                            default: HWdata_next = HWdata_req;
+                                                      endcase
+                                                end 
+                                             else
+                                                HRdata_out_next = HRdata;
+            end
             error_state                   :  HTrans_next = IDLE;
             lock_idle                     :  HTrans_next = IDLE;
             done_s                        :  HTrans_next = IDLE;
-            waitReady                     :  begin
-                                             HTrans_next     = HTrans_reg;
-                                             HBurst_next     = HBurst_reg;
-                                             HSize_next      = HSize_reg;
-                                             HWrite_next     = HWrite_reg;
-                                             HWdata_next     = HWdata_reg;
-                                             HMastlock_next  = HMastlock_reg;
-                                             HProt_next      = HProt_reg;                                            
-            end
             default                       : begin
                                               HTrans_next     = HTrans_reg;
                                               HBurst_next     = HBurst_reg;
@@ -310,6 +291,7 @@ always@(*)begin
                                               HMastlock_next  = HMastlock_reg;
                                               HProt_next      = HProt_reg;
                                               start_Address   = HAddr_reg;
+                                              HRdata_out_next = HRdata_out_reg;
             end               
       endcase
 end
@@ -346,15 +328,19 @@ always@(posedge HClk,negedge HResetn)begin
                                               Wrap_Base <= start_Address & (~(beatSize_req*DataSize_req-1));
                                               Wrap_Addr <= (start_Address & (~(beatSize_req*DataSize_req-1))) + (beatSize_req*DataSize_req);                                              
                   end
-                  transfer            :     begin
-                                              HRdata_out_reg <= HRdata_out_next;
-                                              HWdata_reg <= HWdata_next;
+                  transfer,waitReady   :     begin
+                                                if(!HWrite_next)
+                                                      HRdata_out_reg <= HRdata_out_next;
+                                                else 
+                                                      HWdata_reg <= HWdata_next;
+
                                               beat_count <= beat_count + 1;
                                               HAddr_reg  <= Next_Address;
                                               if(beat_count == (beatSize-1))begin
                                                 beat_count <= 0;
                                                 HTrans_reg <= IDLE;
                                               end
+                                                
                   end
                   default             : HMastlock_reg <= HMastlock_next;
             endcase

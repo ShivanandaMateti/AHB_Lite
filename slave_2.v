@@ -131,17 +131,26 @@ wire misaligned = (DataSize > 1) && ((offset % DataSize) != 0);
 wire valid_transfer = (HSelL && HReadyL && ((HTransL==SEQ) | (HTransL==NONSEQ)));
 
 // local parameters for the response FSM
-localparam RESP_IDLE = 1'd0;
-localparam RESP_ERR2 = 1'd1;
+localparam RESP_IDLE = 2'd0;
+localparam RESP_READWAIT = 2'd1;
+localparam RESP_ERR2 = 2'd2;
 
 // Slave FSM
 
-reg state,next_state;
+reg [1:0] state,next_state;
 always@(*) begin
       next_state = state;
       case(state)
-            RESP_IDLE: next_state = (valid_transfer && (misaligned || !addr_in_range))
-                                          ? RESP_ERR2 : RESP_IDLE;
+            RESP_IDLE: begin 
+                  if(valid_transfer && (misaligned || !addr_in_range))
+                        next_state = RESP_ERR2;
+                  else if(valid_transfer && !HWriteL)
+                        next_state = RESP_READWAIT;
+                  else
+                        next_state = RESP_IDLE;
+            end
+
+            RESP_READWAIT : next_state = RESP_IDLE;
             RESP_ERR2: next_state = RESP_IDLE;
             default:   next_state = RESP_IDLE;
       endcase
@@ -154,37 +163,6 @@ always@(posedge HClk, negedge HResetn) begin
             state <= next_state;
 end
 
-
-// using the latched inputs 
-
-always@(posedge HClk,negedge HResetn)begin
-      if(HResetn && (state==RESP_IDLE))begin
-                              case(HSizeL)
-                              BYTE       :begin
-                                          case(HAddrL[1:0])
-                                          2'b00          :if(HWriteL) mem[HAddrL] <= HWdata[7:0] ; else HRdata_reg[7:0]  <= mem[HAddrL];
-                                          2'b01          :if(HWriteL) mem[HAddrL] <= HWdata[15:8] ; else HRdata_reg[15:8]  <= mem[HAddrL];
-                                          2'b10          :if(HWriteL) mem[HAddrL] <= HWdata[23:16] ; else HRdata_reg[23:16]  <= mem[HAddrL];
-                                          2'b11          :if(HWriteL) mem[HAddrL] <= HWdata[31:24] ; else HRdata_reg[31:24]  <= mem[HAddrL];
-                                          default        :if(HWriteL) mem[HAddrL] <= HWdata[7:0] ; else HRdata_reg[7:0]  <= mem[HAddrL];
-                                          endcase
-                              end
-                              HALFWORD   :begin
-                                          case(HAddrL[1])
-                                          1'b0          : if(HWriteL) {mem[HAddrL+1],mem[HAddrL]} <= HWdata[15:0]; else HRdata_reg[15:0] <= {mem[HAddrL+1],mem[HAddrL]};
-                                          1'b1          : if(HWriteL) {mem[HAddrL+1],mem[HAddrL]} <= HWdata[31:16]; else HRdata_reg[31:16] <= {mem[HAddrL+1],mem[HAddrL]};
-                                          default       : if(HWriteL) {mem[HAddrL+1],mem[HAddrL]} <= HWdata[15:0]; else HRdata_reg[15:0] <= {mem[HAddrL+1],mem[HAddrL]};
-                                          endcase    
-                              end
-                              default       :begin
-                                                if(HWriteL)
-                                                      {mem[HAddrL+3],mem[HAddrL+2],mem[HAddrL+1],mem[HAddrL]} <= HWdata;     
-                                                else
-                                                      HRdata_reg <= {mem[HAddrL+3],mem[HAddrL+2],mem[HAddrL+1],mem[HAddrL]};
-                              end
-                              endcase
-      end
-end
 
 
 // assigning outputs
@@ -202,10 +180,66 @@ always@(posedge HClk, negedge HResetn) begin
                               HResp_reg     <= 1'b1;
                               HReadyOut_reg <= 1'b0;
                         end
+                        else if(valid_transfer && !HWriteL) begin
+                              HResp_reg <= 1'b0;
+                              HReadyOut_reg <= 1'b0;
+                        end
                         else begin
                               HResp_reg     <= 1'b0;
                               HReadyOut_reg <= 1'b1;
+                              if(HResetn && (state==RESP_IDLE))begin
+                              case(HSizeL)
+                              BYTE       :begin
+                                          case(HAddrL[1:0])
+                                          2'b00          :if(HWriteL) mem[offset] <= HWdata[7:0] ; 
+                                          2'b01          :if(HWriteL) mem[offset] <= HWdata[15:8] ; 
+                                          2'b10          :if(HWriteL) mem[offset] <= HWdata[23:16] ; 
+                                          2'b11          :if(HWriteL) mem[offset] <= HWdata[31:24] ; 
+                                          default        :if(HWriteL) mem[offset] <= HWdata[7:0] ; 
+                                          endcase
+                              end
+                              HALFWORD   :begin
+                                          case(HAddrL[1])
+                                          1'b0          : if(HWriteL) {mem[offset+1],mem[offset]} <= HWdata[15:0]; 
+                                          1'b1          : if(HWriteL) {mem[offset+1],mem[offset]} <= HWdata[31:16];
+                                          default       : if(HWriteL) {mem[offset+1],mem[offset]} <= HWdata[15:0]; 
+                                          endcase    
+                              end
+                              default       :begin
+                                                if(HWriteL)
+                                                      {mem[offset+3],mem[offset+2],mem[offset+1],mem[offset]} <= HWdata;     
+                              end
+                              endcase
+                              end
+
                         end
+                  end
+                  RESP_READWAIT : begin
+                        HResp_reg <= 1'b0;
+                        HReadyOut_reg <= 1'b1;
+                        if(HResetn && (state == RESP_READWAIT))begin
+                              case(HSizeL)
+                              BYTE       :begin
+                                          case(HAddrL[1:0])
+                                          2'b00          : HRdata_reg  <= {24'd0,mem[offset]};
+                                          2'b01          : HRdata_reg  <= {16'd0,mem[offset],8'd0};
+                                          2'b10          : HRdata_reg  <= {8'd0,mem[offset],16'd0};
+                                          2'b11          : HRdata_reg  <= {mem[offset],24'd0};
+                                          default        : HRdata_reg  <= {24'd0,mem[offset]};
+                                          endcase
+                              end
+                              HALFWORD   :begin
+                                          case(HAddrL[1])
+                                          1'b0          : HRdata_reg <= {16'd0,mem[offset+1],mem[offset]};
+                                          1'b1          : HRdata_reg <= {mem[offset+1],mem[offset],16'd0};
+                                          default       : HRdata_reg <= {16'd0,mem[offset+1],mem[offset]};
+                                          endcase    
+                              end
+                              default       :begin
+                                          HRdata_reg <= {mem[offset+3],mem[offset+2],mem[offset+1],mem[offset]};
+                              end
+                              endcase
+      end
                   end
                   RESP_ERR2: begin
                         HResp_reg     <= 1'b1;

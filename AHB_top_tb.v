@@ -149,30 +149,36 @@ endtask
 task multiple_read_transfer_check;
 input [4:0] noOfTransfers;
 integer i;
-            begin
-                fork 
-                    begin
-                        @(posedge busy);
-                        for(i=0 ; ((i < noOfTransfers) && busy ); i = i+1)begin
-                                @(posedge beat_done); 
-                                @(posedge HClk);#1; 
-                                if(HRdata_out==dataStorage[i])begin
-                                    $display("%0d th transfer done successfully !  ",i+1);
-                                    $display("DataWritten : %0h , DataRead : %0h",dataStorage[i],HRdata_out);
-                                    pass_count = pass_count + 1;
-                                end
-                                else begin
-                                    $display("%0d th transfer failed !  ",i+1);
-                                    $display("DataWritten : %0h , DataRead : %0h",dataStorage[i],HRdata_out);
-                                    fail_count = fail_count + 1;
-                                end
-                        end
-                    end
-                    begin
-                        do_transfer();
-                    end
-                join
+begin
+    fork
+        begin
+            @(posedge busy);
+            for(i=0 ; ((i < noOfTransfers) && busy ); i = i+1)begin
+                if (i == 0) begin
+                    @(posedge beat_done);   // address/control settle
+                    @(posedge beat_done);   // RESP_READWAIT completes, data now valid
+                end
+                else begin
+                    @(posedge beat_done);
+                end
+                @(posedge HClk);
+                if(HRdata_out==dataStorage[i])begin
+                    $display("%0d th transfer done successfully !  ",i+1);
+                    $display("DataWritten : %0h , DataRead : %0h",dataStorage[i],HRdata_out);
+                    pass_count = pass_count + 1;
+                end
+                else begin
+                    $display("%0d th transfer failed !  ",i+1);
+                    $display("DataWritten : %0h , DataRead : %0h",dataStorage[i],HRdata_out);
+                    fail_count = fail_count + 1;
+                end
             end
+        end
+        begin
+            do_transfer();
+        end
+    join
+end
 endtask
 
 // to clear the storage
@@ -303,6 +309,8 @@ initial begin
     dataStorage[2] = 32'h5678;
     dataStorage[3] = 32'h2134;
     multiple_write_transfer(4'd4);
+    @(negedge HClk);
+    while (busy) @(negedge HClk);
     /*
     @(negedge HClk);
     begins = 1'b1;
@@ -336,6 +344,8 @@ initial begin
     dataStorage[6] = 32'h67;
     dataStorage[7] = 32'h39;
     multiple_write_transfer(4'd8);
+    @(negedge HClk);
+    while (busy) @(negedge HClk);
     /*
     @(negedge HClk);
     begins = 1'b1;
@@ -359,6 +369,7 @@ initial begin
     $display("Reading a series of HALFWORDS from slave_0 using WRAP4 burst");
     HAddr_req = 32'h0000_0100;
     HSize_req = HALFWORD;
+    @(negedge HClk);
     HWrite_req = 1'b0;
     HBurst_req = WRAP4;
     dataStorage[0] = 32'h2432;
@@ -366,6 +377,9 @@ initial begin
     dataStorage[2] = 32'h00005678;
     dataStorage[3] = 32'h21340000;
     multiple_read_transfer_check(4'd4);
+    @(negedge HClk);
+    while (busy) @(negedge HClk);
+
     /*
     @(negedge HClk);
     begins = 1'b1;
@@ -400,6 +414,9 @@ initial begin
     dataStorage[6] = 32'h670000;
     dataStorage[7] = 32'h39000000;
     multiple_read_transfer_check(4'd8);
+    @(negedge HClk);
+    while (busy) @(negedge HClk);
+
     /*
     @(negedge HClk);
     begins = 1'b1;

@@ -254,7 +254,7 @@ always@(*)begin
                                               HProt_next  = HProt_req;
                                               HWrite_next = HWrite_req;
                                               HMastlock_next  = HMastlock_req;
-                                              start_Address      = HAddr_req; 
+                                              start_Address   = HAddr_req; 
             end
             transfer ,waitReady                     :  begin
                                               if(state == transfer) HTrans_next = SEQ;

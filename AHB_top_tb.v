@@ -154,21 +154,16 @@ begin
         begin
             @(posedge busy);
             for(i=0 ; ((i < noOfTransfers) && busy ); i = i+1)begin
-                if (i == 0) begin
-                    @(posedge beat_done);   // address/control settle
-                    @(posedge beat_done);   // RESP_READWAIT completes, data now valid
-                end
-                else begin
-                    @(posedge beat_done);
-                end
+                @(posedge beat_done);
+                @(posedge HClk);
                 @(posedge HClk);
                 if(HRdata_out==dataStorage[i])begin
-                    $display("%0d th transfer done successfully !  ",i+1);
+                    $display("%0dth transfer done successfully !  ",i+1);
                     $display("DataWritten : %0h , DataRead : %0h",dataStorage[i],HRdata_out);
                     pass_count = pass_count + 1;
                 end
                 else begin
-                    $display("%0d th transfer failed !  ",i+1);
+                    $display("%0dth transfer failed !  ",i+1);
                     $display("DataWritten : %0h , DataRead : %0h",dataStorage[i],HRdata_out);
                     fail_count = fail_count + 1;
                 end
@@ -208,8 +203,73 @@ initial begin
     $dumpfile("AHB.vcd");
     $dumpvars(0,AHB_top_tb);
 
-    // Test-4 Writing to an address out of range
-    $display("Test-4 Writing to an address out of range ");
+    
+
+    // Test-1 Single write and read back a byte to slave_0
+    $display("\nTest-1 Single write and read back a byte to slave_0 ");
+    HAddr_req = 32'd0;
+    HWrite_req = 1'b1;
+    HWdata_req = 32'h11;
+    do_transfer();
+    #40;
+    HWrite_req = 1'b0;
+    do_transfer();
+    #40;
+    if(HRdata_out==32'h11)begin
+        $display("PASS! DataWritten : %0h , DataRead : %0h",HWdata_req,HRdata_out);
+        pass_count = pass_count + 1;
+    end
+    else begin
+        $display("FAIL! DataWritten : %0h , DataRead : %0h",HWdata_req,HRdata_out);
+        fail_count = fail_count + 1;
+        
+    end
+
+    // Test-2 Single write and read back a halfword to slave_1
+    $display("\nTest-2 Single write and read back a halfword to slave_1 ");
+    HAddr_req = 32'h0000_0404;
+    HSize_req = HALFWORD;
+    HWrite_req = 1'b1;
+    HWdata_req = 32'h2222;
+    do_transfer();
+    #40;
+    HWrite_req = 1'b0;
+    do_transfer();
+    #40;
+    if(HRdata_out==32'h2222)begin
+        $display("PASS! DataWritten : %0h , DataRead : %0h",HWdata_req,HRdata_out);
+        pass_count = pass_count + 1;
+    end
+    else begin
+        $display("FAIL! DataWritten : %0h , DataRead : %0h",HWdata_req,HRdata_out);
+        fail_count = fail_count + 1;
+        
+    end
+
+    // Test-3 Single write and read back a byte to slave_2
+    $display("\nTest-3 Single write and read back a word to slave_2 ");
+    HAddr_req = 32'h0000_0808;
+    HSize_req = WORD;
+    HWrite_req = 1'b1;
+    HWdata_req = 32'h33333333;
+    do_transfer();
+    #40;
+    HWrite_req = 1'b0;
+    do_transfer();
+    #40;
+    if(HRdata_out==32'h33333333)begin
+        $display("PASS! DataWritten : %0h , DataRead : %0h",HWdata_req,HRdata_out);
+        pass_count = pass_count + 1;
+    end
+    else begin
+        $display("FAIL! DataWritten : %0h , DataRead : %0h",HWdata_req,HRdata_out);
+        fail_count = fail_count + 1;
+        
+    end
+
+#200;
+// Test-4 Writing to an address out of range
+    $display("\nTest-4 Writing to an address out of range ");
     HAddr_req = 32'h0001_0000;
     HWrite_req = 1'b1;
     HWdata_req = 32'h42424242;
@@ -232,72 +292,8 @@ initial begin
 
     #400;
 
-    // Test-1 Single write and read back a byte to slave_0
-    $display("Test-1 Single write and read back a byte to slave_0 ");
-    HAddr_req = 32'd0;
-    HWrite_req = 1'b1;
-    HWdata_req = 32'h11;
-    do_transfer();
-    #40;
-    HWrite_req = 1'b0;
-    do_transfer();
-    #40;
-    if(HRdata_out==32'h11)begin
-        $display("PASS! DataWritten : %0h , DataRead : %0h",HWdata_req,HRdata_out);
-        pass_count = pass_count + 1;
-    end
-    else begin
-        $display("FAIL! DataWritten : %0h , DataRead : %0h",HWdata_req,HRdata_out);
-        fail_count = fail_count + 1;
-        
-    end
-
-    // Test-2 Single write and read back a halfword to slave_1
-    $display("Test-2 Single write and read back a byte to slave_1 ");
-    HAddr_req = 32'h0000_0404;
-    HSize_req = HALFWORD;
-    HWrite_req = 1'b1;
-    HWdata_req = 32'h2222;
-    do_transfer();
-    #40;
-    HWrite_req = 1'b0;
-    do_transfer();
-    #40;
-    if(HRdata_out==32'h2222)begin
-        $display("PASS! DataWritten : %0h , DataRead : %0h",HWdata_req,HRdata_out);
-        pass_count = pass_count + 1;
-    end
-    else begin
-        $display("FAIL! DataWritten : %0h , DataRead : %0h",HWdata_req,HRdata_out);
-        fail_count = fail_count + 1;
-        
-    end
-
-    // Test-3 Single write and read back a byte to slave_2
-    $display("Test-3 Single write and read back a word to slave_2 ");
-    HAddr_req = 32'h0000_0808;
-    HSize_req = WORD;
-    HWrite_req = 1'b1;
-    HWdata_req = 32'h33333333;
-    do_transfer();
-    #40;
-    HWrite_req = 1'b0;
-    do_transfer();
-    #40;
-    if(HRdata_out==32'h33333333)begin
-        $display("PASS! DataWritten : %0h , DataRead : %0h",HWdata_req,HRdata_out);
-        pass_count = pass_count + 1;
-    end
-    else begin
-        $display("FAIL! DataWritten : %0h , DataRead : %0h",HWdata_req,HRdata_out);
-        fail_count = fail_count + 1;
-        
-    end
-
-#200;
-
     // Test-5 back to back beats to 2 different slaves
-    $display("Test-5 back to back beats to 2 different slaves" );
+    $display("\nTest-5 back to back beats to 2 different slaves" );
     // to slave 0 write
     $display("Writing a series of HALFWORDS to slave_0 using WRAP4 burst");
     HAddr_req = 32'h0000_0100;
@@ -311,23 +307,7 @@ initial begin
     multiple_write_transfer(4'd4);
     @(negedge HClk);
     while (busy) @(negedge HClk);
-    /*
-    @(negedge HClk);
-    begins = 1'b1;
-    @(posedge HClk);
-    begins = 1'b0;
-    for(i=0 ; i < 4 ; i = i+1)begin
-        if(i==0)begin
-            repeat(2) @(posedge HClk);  // waiting for the address to settle
-            HWdata_req = dataStorage[0];
-        end
-        else begin
-            @(posedge beat_done);
-            repeat(3) @(posedge HClk);  // waiting for the address to settle
-            HWdata_req = dataStorage[i];
-        end
-    end
-    */
+    
 
     // to slave 1 write
     $display("Writing a series of BYTES to slave_1 using INCR8 burst");
@@ -346,30 +326,13 @@ initial begin
     multiple_write_transfer(4'd8);
     @(negedge HClk);
     while (busy) @(negedge HClk);
-    /*
-    @(negedge HClk);
-    begins = 1'b1;
-    @(posedge HClk);
-    begins = 1'b0;
-    for(i=0 ; i < 8 ; i = i+1)begin
-        if(i==0)begin
-            HWdata_req = dataStorage[0];
-            repeat(2) @(posedge HClk);  // waiting for the address to settle
-        end
-        else begin
-            @(posedge beat_done);
-            repeat(3) @(posedge HClk);  // waiting for the address to settle
-            HWdata_req = dataStorage[i];
-        end
-    end
-    */
+
     
 
     // to slave 0 read
     $display("Reading a series of HALFWORDS from slave_0 using WRAP4 burst");
     HAddr_req = 32'h0000_0100;
     HSize_req = HALFWORD;
-    @(negedge HClk);
     HWrite_req = 1'b0;
     HBurst_req = WRAP4;
     dataStorage[0] = 32'h2432;
@@ -380,24 +343,7 @@ initial begin
     @(negedge HClk);
     while (busy) @(negedge HClk);
 
-    /*
-    @(negedge HClk);
-    begins = 1'b1;
-    @(posedge HClk);
-    begins = 1'b0;
-    repeat(2) @(posedge HClk);  // waiting for the address to settle
-    for(i = 0 ; i < 4 ; i = i+1)begin
-        @(posedge beat_done);
-        if(AHB_dut.HRdata_out == dataStorage[i])begin
-            $display("PASS ! Data written : %0h , DataRead : %0h",dataStorage[i],AHB_dut.HRdata_out);
-            pass_count = pass_count + 1;
-        end
-        else begin
-            $display("FAIL ! Data written : %0h , DataRead : %0h",dataStorage[i],AHB_dut.HRdata_out);
-            fail_count = fail_count + 1;
-        end
-    end
-    */
+
 
     // to slave 1 read
     $display("Reading a series of BYTES from slave_1 using INCR8 burst");
@@ -417,29 +363,43 @@ initial begin
     @(negedge HClk);
     while (busy) @(negedge HClk);
 
-    /*
+   // Test-6 User required beats using incr burst
+    $display("\nTest-6 User given beats using incr burst to slave_2" );
+    $display("Writing a series of HALFWORDS to slave_2 using INCRN burst");
+    HAddr_req = 32'h0000_0900;
+    HSize_req = HALFWORD;
+    HWrite_req = 1'b1;
+    beats_req = 8'd6;
+    dataStorage[0] = 32'haaaa;
+    dataStorage[1] = 32'hbbbb;
+    dataStorage[2] = 32'hcccc;
+    dataStorage[3] = 32'hdddd;
+    dataStorage[4] = 32'heeee;
+    dataStorage[5] = 32'hffff;
+    multiple_write_transfer(4'd6);
     @(negedge HClk);
-    begins = 1'b1;
-    @(posedge HClk);
-    begins = 1'b0;
-    repeat(2) @(posedge HClk);  // waiting for the address to settle
-    for(i = 0 ; i < 8 ; i = i+1)begin
-        @(posedge beat_done);
-        if(AHB_dut.HRdata_out == dataStorage[i])begin
-            $display("PASS ! Data written : %0h , DataRead : %0h",dataStorage[i],AHB_dut.HRdata_out);
-            pass_count = pass_count + 1;
-        end
-        else begin
-            $display("FAIL ! Data written : %0h , DataRead : %0h",dataStorage[i],AHB_dut.HRdata_out);
-            fail_count = fail_count + 1;
-        end
-    end
-    */
+    while (busy) @(negedge HClk);
+
+    // to slave 2 read
+    $display("Reading a series of HALFWORDS from slave_2 using INCRN burst");
+    HAddr_req = 32'h0000_0900;
+    HSize_req = HALFWORD;
+    HWrite_req = 1'b0;
+    beats_req = 8'd6;
+    dataStorage[0] = 32'haaaa;
+    dataStorage[1] = 32'hbbbb0000;
+    dataStorage[2] = 32'hcccc;
+    dataStorage[3] = 32'hdddd0000;
+    dataStorage[4] = 32'heeee;
+    dataStorage[5] = 32'hffff0000;
+    multiple_read_transfer_check(4'd6);
+    @(negedge HClk);
+    while (busy) @(negedge HClk);
     
     // Test sequence 
     //--------------------------> RESULTS <-----------------------------
-    $display("TESTING FINISHED !!!!");
-    $display("THE RESULTS ARE : \n PASSCOUNT = %0d \n FAILCOUNT = %0d ",pass_count,fail_count );
+    $display("\nTESTING FINISHED !!!!");
+    $display("\nTHE RESULTS ARE : \n PASSCOUNT = %0d \n FAILCOUNT = %0d ",pass_count,fail_count );
 
    
 

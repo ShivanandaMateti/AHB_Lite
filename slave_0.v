@@ -1,4 +1,3 @@
-
 module slave_0 #(   
                     parameter BaseAddr = 32'h0000_0000 ,
                     parameter Depth = 1024 ,
@@ -187,7 +186,15 @@ always@(posedge HClk, negedge HResetn) begin
                         else begin
                               HResp_reg     <= 1'b0;
                               HReadyOut_reg <= 1'b1;
-                              if(HResetn && (state==RESP_IDLE))begin
+                              // BUGFIX: the write below was gated only by HWriteL, not by
+                              // valid_transfer. HWriteL/HAddrL are latched registers that hold
+                              // their last value indefinitely while the bus is idle, so once a
+                              // write transaction finishes, this branch keeps re-firing a phantom
+                              // write (using the stale leftover address and whatever happens to
+                              // be on HWdata) on every subsequent idle cycle -- silently
+                              // clobbering the address that was just correctly written the
+                              // instant the bus goes idle or a new (e.g. read) transaction begins.
+                              if(HResetn && (state==RESP_IDLE) && valid_transfer)begin
                               case(HSizeL)
                               BYTE       :begin
                                           case(HAddrL[1:0])
